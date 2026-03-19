@@ -189,6 +189,14 @@ CGO_ENABLED=1 go build -o /usr/local/bin/weaviate ./cmd/weaviate-server 2>&1
 echo "${WEAVIATE_VERSION}" >/opt/weaviate_version.txt
 cd /opt
 rm -rf /opt/weaviate-src
+
+# Clean up Go build cache and module cache to reclaim disk space
+# The binary is compiled — we don't need these anymore
+msg_info "Cleaning Up Build Artifacts"
+go clean -cache -modcache 2>/dev/null || true
+rm -rf /root/go /root/.cache/go-build 2>/dev/null || true
+msg_ok "Cleaned Up Build Artifacts"
+
 msg_ok "Built Weaviate v${WEAVIATE_VERSION}"
 
 # ─── Create Directories ───
