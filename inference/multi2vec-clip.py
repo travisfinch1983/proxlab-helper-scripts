@@ -39,6 +39,7 @@ model: SentenceTransformer = None
 
 
 class VectorizeRequest(BaseModel):
+    model_config = {"extra": "allow"}
     texts: list[str] = Field(default_factory=list)
     images: list[str] = Field(default_factory=list)  # base64-encoded
 

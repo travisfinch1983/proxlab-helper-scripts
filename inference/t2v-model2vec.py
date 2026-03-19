@@ -32,6 +32,7 @@ model: StaticModel = None
 
 
 class VectorRequest(BaseModel):
+    model_config = {"extra": "allow"}
     text: str
     config: dict = Field(default_factory=dict)
 

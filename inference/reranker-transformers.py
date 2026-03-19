@@ -36,6 +36,7 @@ model: CrossEncoder = None
 
 
 class RerankRequest(BaseModel):
+    model_config = {"extra": "allow"}
     query: str
     documents: Optional[list[str]] = None
     property: Optional[str] = None
