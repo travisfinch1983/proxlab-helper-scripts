@@ -32,8 +32,9 @@ We plan to eventually. These scripts are being developed and tested here first. 
 | Application | Type | Description |
 |-------------|------|-------------|
 | [Weaviate](ct/weaviate.sh) | Vector DB | Open-source vector database with built-in vectorizer modules |
-| Milvus | Vector DB | *Coming soon* |
-| Qdrant | Vector DB | *Coming soon* |
+| [Milvus](ct/milvus.sh) | Vector DB | Cloud-native distributed vector database for scalable similarity search |
+| [ChromaDB](ct/chromadb.sh) | Vector DB | AI-native embedding database, simple Python-based setup |
+| Qdrant | Vector DB | *Already available in [community-scripts](https://github.com/community-scripts/ProxmoxVE)* |
 
 ## Usage
 
