@@ -26,14 +26,40 @@ PROXLAB_SCRIPTS_URL="${PROXLAB_SCRIPTS_URL:-https://raw.githubusercontent.com/tr
 
 # The community URL pattern we intercept
 _COMMUNITY_INSTALL_PREFIX="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/"
+_COMMUNITY_HEADER_PREFIX="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/headers/"
 
 # ── Step 1: Source the real build.func ──
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# ── Step 2: Save original build_container ──
+# ── Step 2: Save original build_container and header functions ──
 eval "$(declare -f build_container | sed '1s/build_container/_community_build_container/')"
 
-# ── Step 3: Override build_container ──
+# ── Step 3: Override get_header to try our repo first, then fall back ──
+# This prevents 404 warnings for apps not in the community repo
+_original_get_header=$(declare -f get_header 2>/dev/null)
+if [[ -n "$_original_get_header" ]]; then
+  eval "$(echo "$_original_get_header" | sed '1s/get_header/_community_get_header/')"
+  get_header() {
+    local app_name="$1"
+    local proxlab_header_url="${PROXLAB_SCRIPTS_URL}/ct/headers/${app_name}"
+    local local_header_path="/usr/local/community-scripts/headers/ct/${app_name}"
+
+    mkdir -p "$(dirname "$local_header_path")"
+
+    # Try ProxLab repo first
+    if [ ! -s "$local_header_path" ]; then
+      if curl -fsSL "$proxlab_header_url" -o "$local_header_path" 2>/dev/null; then
+        cat "$local_header_path" 2>/dev/null || true
+        return 0
+      fi
+    fi
+
+    # Fall back to community repo (suppress 404 warning)
+    _community_get_header "$@" 2>/dev/null || true
+  }
+fi
+
+# ── Step 4: Override build_container to redirect install script URL ──
 build_container() {
   # Save the real curl path
   local _real_curl
