@@ -122,21 +122,27 @@ echo "${MILVUS_VERSION}" >/opt/milvus_version.txt
 msg_info "Configuring Milvus"
 mkdir -p "${MILVUS_DATA_DIR}" /var/log/milvus
 
-# The .deb package installs configs to /etc/milvus/configs/
-# If they don't exist (install script method), create them
-if [[ ! -d /etc/milvus/configs ]]; then
+# The .deb package installs a full milvus.yaml with correct timeout/keepalive
+# settings. DO NOT replace it — only patch the values we need to change.
+# Replacing the stock config strips critical settings that cause context
+# canceled panics on startup.
+
+if [[ -f /etc/milvus/configs/milvus.yaml ]]; then
+  # Patch auth setting in the stock config
+  if [[ "$MILVUS_AUTH_ENABLED" == "true" ]]; then
+    sed -i 's/authorizationEnabled: false/authorizationEnabled: true/' /etc/milvus/configs/milvus.yaml
+  fi
+  # Ensure embedded etcd data dir is set to absolute path
+  sed -i "s|data.dir:.*|data.dir: ${MILVUS_DATA_DIR}/etcd|" /etc/milvus/configs/milvus.yaml
+else
+  # No .deb config — create a minimal one (install script fallback)
   mkdir -p /etc/milvus/configs
-fi
-
-# Main config — standalone mode uses embedded etcd + local storage
-# No external etcd or MinIO needed
-cat >/etc/milvus/configs/milvus.yaml <<EOF
-# Milvus Standalone Configuration
-# Installed by ProxLab Helper Scripts
-
+  cat >/etc/milvus/configs/milvus.yaml <<EOF
 etcd:
-  endpoints:
-    - localhost:2379
+  endpoints: localhost:2379
+  requestTimeout: 10000
+  dialKeepAliveTime: 3000
+  dialKeepAliveTimeout: 2000
   use:
     embed: true
   data:
@@ -144,16 +150,9 @@ etcd:
   config:
     path: /etc/milvus/configs/embedEtcd.yaml
 
-metastore:
-  type: etcd
-
 common:
   security:
     authorizationEnabled: ${MILVUS_AUTH_ENABLED}
-  storageType: local
-
-localStorage:
-  path: ${MILVUS_DATA_DIR}/data
 
 proxy:
   port: ${MILVUS_PORT}
@@ -165,21 +164,18 @@ log:
   file:
     rootPath: /var/log/milvus
 EOF
+fi
 
-# Embedded etcd config — CRITICAL: data-dir must be absolute path
-# Without this, etcd uses a relative path that changes with CWD,
-# causing leader election panics on restart
+# Embedded etcd config — keep it simple like the working installation
+# Extra settings (listen-peer-urls, initial-cluster, snapshot-count) can
+# cause issues. The minimal config is the most reliable.
 cat >/etc/milvus/configs/embedEtcd.yaml <<EOF
 listen-client-urls: http://0.0.0.0:2379
-advertise-client-urls: http://127.0.0.1:2379
-listen-peer-urls: http://0.0.0.0:2380
-initial-advertise-peer-urls: http://127.0.0.1:2380
-initial-cluster: default=http://127.0.0.1:2380
+advertise-client-urls: http://0.0.0.0:2379
 data-dir: ${MILVUS_DATA_DIR}/etcd
-auto-compaction-mode: revision
-auto-compaction-retention: "1000"
 quota-backend-bytes: 4294967296
-snapshot-count: 50000
+auto-compaction-mode: revision
+auto-compaction-retention: '1000'
 EOF
 
 msg_ok "Configured Milvus"
