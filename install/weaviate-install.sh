@@ -402,6 +402,114 @@ if ! curl -sf "http://localhost:${WEAVIATE_PORT}/v1/meta" >/dev/null 2>&1; then
   journalctl -u weaviate --no-pager -n 20
 fi
 
+# ─── Create Example Collection ───
+if curl -sf "http://localhost:${WEAVIATE_PORT}/v1/meta" >/dev/null 2>&1; then
+  msg_info "Creating Example Collection"
+
+  # Determine vectorizer and module config for the example collection
+  EXAMPLE_VECTORIZER="none"
+  EXAMPLE_MODULE_CONFIG=""
+
+  if has_module "text2vec-openai"; then
+    EXAMPLE_VECTORIZER="text2vec-openai"
+    EXAMPLE_MODULE_CONFIG="\"text2vec-openai\": {
+        \"model\": \"${WEAVIATE_OPENAI_MODEL:-default}\",
+        \"baseURL\": \"${WEAVIATE_OPENAI_BASE_URL:-}\",
+        \"vectorizeClassName\": false
+      }"
+  elif has_module "text2vec-ollama"; then
+    EXAMPLE_VECTORIZER="text2vec-ollama"
+    EXAMPLE_MODULE_CONFIG="\"text2vec-ollama\": {
+        \"model\": \"${WEAVIATE_OLLAMA_MODEL:-default}\",
+        \"apiEndpoint\": \"${WEAVIATE_OLLAMA_HOST:-http://localhost:11434}\",
+        \"vectorizeClassName\": false
+      }"
+  fi
+
+  if [[ "$EXAMPLE_VECTORIZER" != "none" ]]; then
+    curl -sf -X POST "http://localhost:${WEAVIATE_PORT}/v1/schema" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"class\": \"Example_collection\",
+        \"vectorizer\": \"${EXAMPLE_VECTORIZER}\",
+        \"moduleConfig\": { ${EXAMPLE_MODULE_CONFIG} },
+        \"properties\": [
+          {
+            \"name\": \"content\",
+            \"dataType\": [\"text\"],
+            \"moduleConfig\": {
+              \"${EXAMPLE_VECTORIZER}\": {
+                \"skip\": false,
+                \"vectorizePropertyName\": false
+              }
+            }
+          },
+          {
+            \"name\": \"source\",
+            \"dataType\": [\"text\"],
+            \"moduleConfig\": {
+              \"${EXAMPLE_VECTORIZER}\": {
+                \"skip\": true
+              }
+            }
+          }
+        ]
+      }" >/dev/null 2>&1 && msg_ok "Created Example Collection (example_collection)" || msg_warn "Could not create example collection"
+  else
+    msg_info "Skipping example collection (no vectorizer module enabled)"
+  fi
+
+  # Save a reference script for creating additional collections
+  cat >/etc/weaviate/create-collection-example.sh <<'REFSCRIPT'
+#!/bin/bash
+# Example: Create a new Weaviate collection
+# Adjust the vectorizer, model, and endpoint to match your setup.
+# See /etc/weaviate/models.conf for the models selected during install.
+#
+# IMPORTANT: Set vectorizeClassName to false when using OpenAI-compatible
+# endpoints — some models produce degenerate embeddings when the class
+# name is prepended to the input text.
+
+WEAVIATE_URL="http://localhost:8080"
+
+curl -X POST "${WEAVIATE_URL}/v1/schema" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "class": "MyCollection",
+    "vectorizer": "text2vec-openai",
+    "moduleConfig": {
+      "text2vec-openai": {
+        "model": "your-model-name",
+        "baseURL": "http://your-endpoint:port/v1",
+        "vectorizeClassName": false
+      }
+    },
+    "properties": [
+      {
+        "name": "content",
+        "dataType": ["text"],
+        "moduleConfig": {
+          "text2vec-openai": {
+            "skip": false,
+            "vectorizePropertyName": false
+          }
+        }
+      },
+      {
+        "name": "metadata",
+        "dataType": ["text"],
+        "moduleConfig": {
+          "text2vec-openai": {
+            "skip": true
+          }
+        }
+      }
+    ]
+  }'
+REFSCRIPT
+  chmod +x /etc/weaviate/create-collection-example.sh
+fi
+
 motd_ssh
 customize
 cleanup_lxc
