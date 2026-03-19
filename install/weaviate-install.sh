@@ -75,32 +75,42 @@ has_module() { echo ",$WEAVIATE_MODULES," | grep -q ",$1,"; }
 # Usage: selected_model=$(select_model_from_endpoint "http://host:port" "ollama|openai" "embedding model")
 # Returns: model name on stdout, or empty string if user chose manual entry
 select_model_from_endpoint() {
+  # Disable strict error handling inside this function — network queries
+  # and parsing can fail in many non-fatal ways
+  set +euo pipefail
+
   local base_url="$1"
   local api_type="$2"   # "ollama" or "openai"
   local purpose="$3"    # display text like "embedding model"
   local models=()
   local json_response=""
+  local parsed_models=""
 
   echo -e "\n  ${INFO}${YW} Querying ${base_url} for available models...${CL}" >&2
 
   if [[ "$api_type" == "ollama" ]]; then
-    json_response=$(curl -sf --connect-timeout 5 "${base_url}/api/tags" 2>/dev/null || echo "")
+    json_response=$(curl -sf --connect-timeout 5 "${base_url}/api/tags" 2>/dev/null || true)
     if [[ -n "$json_response" ]]; then
-      while IFS= read -r model; do
-        [[ -n "$model" ]] && models+=("$model")
-      done < <(echo "$json_response" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | sort)
+      parsed_models=$(echo "$json_response" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 2>/dev/null || true)
     fi
   elif [[ "$api_type" == "openai" ]]; then
-    # Strip trailing /v1 if present, then add /v1/models
     local models_url="${base_url%/}"
     models_url="${models_url%/v1}/v1/models"
-    json_response=$(curl -sf --connect-timeout 5 "$models_url" 2>/dev/null || echo "")
+    json_response=$(curl -sf --connect-timeout 5 "$models_url" 2>/dev/null || true)
     if [[ -n "$json_response" ]]; then
-      while IFS= read -r model; do
-        [[ -n "$model" ]] && models+=("$model")
-      done < <(echo "$json_response" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | sort)
+      parsed_models=$(echo "$json_response" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 2>/dev/null || true)
     fi
   fi
+
+  # Build array from parsed output
+  if [[ -n "$parsed_models" ]]; then
+    while IFS= read -r model; do
+      [[ -n "$model" ]] && models+=("$model")
+    done <<< "$parsed_models"
+  fi
+
+  # Re-enable strict mode before returning
+  set -euo pipefail
 
   if [[ ${#models[@]} -eq 0 ]]; then
     echo -e "  ${YW}Could not retrieve model list from endpoint${CL}" >&2
