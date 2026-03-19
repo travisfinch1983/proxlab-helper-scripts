@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────────
+# ProxLab Helper Scripts — build.func Shim
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# This shim loads the community-scripts build.func and hooks the install
+# script download so it fetches from the ProxLab Helper Scripts repo instead.
+#
+# HOW IT WORKS:
+#   1. Sources the real build.func from community-scripts (unmodified)
+#   2. Wraps build_container() to temporarily redirect curl requests
+#      for install/<app>-install.sh to this repo's URL
+#   3. All other downloads (install.func, tools.func, core.func, etc.)
+#      go to the community repo as normal — we don't touch those
+#
+# USAGE:
+#   In ct/<app>.sh, replace:
+#     source <(curl -fsSL https://...community-scripts.../misc/build.func)
+#   With:
+#     source <(curl -fsSL https://...proxlab-helper-scripts.../misc/proxlab.func)
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Where our install scripts live
+PROXLAB_SCRIPTS_URL="${PROXLAB_SCRIPTS_URL:-https://raw.githubusercontent.com/travisfinch1983/proxlab-helper-scripts/main}"
+
+# The community URL pattern we intercept
+_COMMUNITY_INSTALL_PREFIX="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/"
+
+# ── Step 1: Source the real build.func ──
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+
+# ── Step 2: Save original build_container ──
+eval "$(declare -f build_container | sed '1s/build_container/_community_build_container/')"
+
+# ── Step 3: Override build_container ──
+build_container() {
+  # Save the real curl path
+  local _real_curl
+  _real_curl="$(command -v curl)"
+
+  # Create a wrapper script that intercepts install script downloads
+  local _wrapper="/tmp/.proxlab-curl-wrapper-$$.sh"
+  cat >"$_wrapper" <<WRAPPER_EOF
+#!/usr/bin/env bash
+# ProxLab curl wrapper — redirects install script URLs to our repo
+args=("\$@")
+for i in "\${!args[@]}"; do
+  case "\${args[\$i]}" in
+    ${_COMMUNITY_INSTALL_PREFIX}*)
+      script_name="\${args[\$i]##*/}"
+      args[\$i]="${PROXLAB_SCRIPTS_URL}/install/\${script_name}"
+      echo "  [ProxLab] Install script redirected → \${args[\$i]}" >&2
+      ;;
+  esac
+done
+exec "${_real_curl}" "\${args[@]}"
+WRAPPER_EOF
+  chmod +x "$_wrapper"
+
+  # Temporarily prepend wrapper directory to PATH so it shadows curl
+  local _wrapper_dir="/tmp/.proxlab-bin-$$"
+  mkdir -p "$_wrapper_dir"
+  ln -sf "$_wrapper" "$_wrapper_dir/curl"
+  export PATH="${_wrapper_dir}:${PATH}"
+
+  # Run the original build_container with our curl in PATH
+  _community_build_container
+
+  # Clean up
+  rm -f "$_wrapper" "$_wrapper_dir/curl"
+  rmdir "$_wrapper_dir" 2>/dev/null
+  export PATH="${PATH#${_wrapper_dir}:}"
+}
