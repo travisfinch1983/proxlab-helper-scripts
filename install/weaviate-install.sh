@@ -69,6 +69,73 @@ fi
 # ─── Helper: check if module is in the comma-separated list ───
 has_module() { echo ",$WEAVIATE_MODULES," | grep -q ",$1,"; }
 
+# ─── Helper: query endpoint for available models, present selection menu ───
+# Usage: selected_model=$(select_model_from_endpoint "http://host:port" "ollama|openai" "embedding model")
+# Returns: model name on stdout, or empty string if user chose manual entry
+select_model_from_endpoint() {
+  local base_url="$1"
+  local api_type="$2"   # "ollama" or "openai"
+  local purpose="$3"    # display text like "embedding model"
+  local models=()
+  local json_response=""
+
+  echo -e "\n  ${INFO}${YW} Querying ${base_url} for available models...${CL}" >&2
+
+  if [[ "$api_type" == "ollama" ]]; then
+    json_response=$(curl -sf --connect-timeout 5 "${base_url}/api/tags" 2>/dev/null || echo "")
+    if [[ -n "$json_response" ]]; then
+      while IFS= read -r model; do
+        [[ -n "$model" ]] && models+=("$model")
+      done < <(echo "$json_response" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | sort)
+    fi
+  elif [[ "$api_type" == "openai" ]]; then
+    # Strip trailing /v1 if present, then add /v1/models
+    local models_url="${base_url%/}"
+    models_url="${models_url%/v1}/v1/models"
+    json_response=$(curl -sf --connect-timeout 5 "$models_url" 2>/dev/null || echo "")
+    if [[ -n "$json_response" ]]; then
+      while IFS= read -r model; do
+        [[ -n "$model" ]] && models+=("$model")
+      done < <(echo "$json_response" | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | sort)
+    fi
+  fi
+
+  if [[ ${#models[@]} -eq 0 ]]; then
+    echo -e "  ${YW}Could not retrieve model list from endpoint${CL}" >&2
+    echo ""
+    return 0
+  fi
+
+  echo -e "\n  ${GN}Found ${#models[@]} model(s) available:${CL}\n" >&2
+  local i=1
+  for m in "${models[@]}"; do
+    echo -e "  ${BL}${i})${CL} ${m}" >&2
+    ((i++))
+  done
+  echo -e "  ${BL}${i})${CL} [Enter manually]" >&2
+  echo "" >&2
+
+  while true; do
+    read -e -r -p "  Select ${purpose} [1-${i}]: " choice </dev/tty >&2
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= i )); then
+      if (( choice == i )); then
+        # User wants manual entry
+        echo ""
+        return 0
+      fi
+      local selected="${models[$((choice-1))]}"
+      echo -e "\n  ${BL}Selected:${CL} ${selected}" >&2
+      read -e -r -p "  Is this correct? [Y/n]: " confirm </dev/tty >&2
+      if [[ ! "$confirm" =~ ^[Nn]$ ]]; then
+        echo "$selected"
+        return 0
+      fi
+    else
+      echo -e "  ${RD}Invalid selection${CL}" >&2
+    fi
+  done
+}
+
 # ─── Interactive Ollama host (if using ollama modules and not pre-set) ───
 if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$WEAVIATE_OLLAMA_HOST" ]]; then
   while true; do
@@ -80,6 +147,26 @@ if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$W
     [[ ! "$confirm" =~ ^[Nn]$ ]] && break
     echo ""
   done
+
+  # Query Ollama for available models and let user select
+  if has_module "text2vec-ollama" && [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+    WEAVIATE_OLLAMA_MODEL=$(select_model_from_endpoint "$WEAVIATE_OLLAMA_HOST" "ollama" "embedding model")
+    if [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+      # Fallback to manual entry
+      while true; do
+        read -e -r -p "  Ollama embedding model name: " ans
+        WEAVIATE_OLLAMA_MODEL="${ans}"
+        if [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+          echo -e "  ${RD}Model name cannot be empty${CL}"
+          continue
+        fi
+        echo -e "  ${BL}Embedding model:${CL} ${WEAVIATE_OLLAMA_MODEL}"
+        read -e -r -p "  Is this correct? [Y/n]: " confirm
+        [[ ! "$confirm" =~ ^[Nn]$ ]] && break
+        echo ""
+      done
+    fi
+  fi
 fi
 
 # ─── Interactive OpenAI-compatible endpoint (if using openai modules and not pre-set) ───
@@ -101,20 +188,24 @@ if (has_module "text2vec-openai" || has_module "generative-openai") && [[ -z "$W
     echo ""
   done
 
+  # Query endpoint for available models and let user select
   if has_module "text2vec-openai" && [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
-    while true; do
-      read -e -r -p "  Embedding model name (as served by your endpoint): " ans
-      WEAVIATE_OPENAI_MODEL="${ans}"
-      if [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
-        echo -e "  ${RD}Model name cannot be empty${CL}"
-        continue
-      fi
-      echo ""
-      echo -e "  ${BL}Embedding model:${CL} ${WEAVIATE_OPENAI_MODEL}"
-      read -e -r -p "  Is this correct? [Y/n]: " confirm
-      [[ ! "$confirm" =~ ^[Nn]$ ]] && break
-      echo ""
-    done
+    WEAVIATE_OPENAI_MODEL=$(select_model_from_endpoint "$WEAVIATE_OPENAI_BASE_URL" "openai" "embedding model")
+    if [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
+      # Fallback to manual entry
+      while true; do
+        read -e -r -p "  Embedding model name (as served by your endpoint): " ans
+        WEAVIATE_OPENAI_MODEL="${ans}"
+        if [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
+          echo -e "  ${RD}Model name cannot be empty${CL}"
+          continue
+        fi
+        echo -e "  ${BL}Embedding model:${CL} ${WEAVIATE_OPENAI_MODEL}"
+        read -e -r -p "  Is this correct? [Y/n]: " confirm
+        [[ ! "$confirm" =~ ^[Nn]$ ]] && break
+        echo ""
+      done
+    fi
   fi
 fi
 
@@ -250,12 +341,25 @@ if has_module "text2vec-ollama" || has_module "generative-ollama"; then
   echo "OLLAMA_API_ENDPOINT=${WEAVIATE_OLLAMA_HOST}" >>/etc/default/weaviate
 fi
 if has_module "text2vec-openai" || has_module "generative-openai"; then
-  # For OpenAI-compatible endpoints, Weaviate uses these env vars:
-  # The base URL points to your local/self-hosted endpoint
   echo "OPENAI_BASE_URL=${WEAVIATE_OPENAI_BASE_URL}" >>/etc/default/weaviate
-  # A dummy key is required even if your endpoint doesn't need auth
   echo "OPENAI_APIKEY=${WEAVIATE_OPENAI_APIKEY:-proxlab-no-auth}" >>/etc/default/weaviate
 fi
+
+# Save selected models to a reference file
+# NOTE: Weaviate sets the model per-collection via the API, not globally.
+# This file is for user reference — the model names are used when creating
+# collections, not at service startup.
+cat >/etc/weaviate/models.conf <<MODCONF
+# Weaviate Model Configuration Reference
+# These models were selected during installation.
+# Use them when creating collections via the Weaviate API.
+# This file is for reference only — it is NOT read by Weaviate at runtime.
+OLLAMA_EMBEDDING_MODEL=${WEAVIATE_OLLAMA_MODEL:-not configured}
+OPENAI_EMBEDDING_MODEL=${WEAVIATE_OPENAI_MODEL:-not configured}
+OLLAMA_HOST=${WEAVIATE_OLLAMA_HOST:-not configured}
+OPENAI_BASE_URL=${WEAVIATE_OPENAI_BASE_URL:-not configured}
+MODCONF
+
 msg_ok "Created Weaviate Environment File"
 
 # ─── Systemd Service ───
