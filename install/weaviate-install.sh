@@ -256,12 +256,25 @@ WEAVIATE_CLIP_HF_MODEL="${WEAVIATE_CLIP_HF_MODEL:-}"
 WEAVIATE_RERANKER_HF_MODEL="${WEAVIATE_RERANKER_HF_MODEL:-}"
 
 if has_module "text2vec-transformers" && [[ -z "${WEAVIATE_TRANSFORMERS_HF_MODEL:-}" ]]; then
-  echo -e "\n  ${INFO}${YW} Select text2vec-transformers model:${CL}"
-  echo -e "  ${BL}1)${CL} all-MiniLM-L6-v2 (fast, 384d, English)"
-  echo -e "  ${BL}2)${CL} paraphrase-multilingual-MiniLM-L12-v2 (384d, multilingual)"
-  echo -e "  ${BL}3)${CL} all-mpnet-base-v2 (768d, best quality English)"
-  echo -e "  ${BL}4)${CL} bge-base-en-v1.5 (768d, BAAI)"
+  echo -e "\n  ${INFO}${YW} Select text2vec-transformers model:${CL}\n"
+  echo -e "  ${BL}1)${CL} all-MiniLM-L6-v2"
+  echo -e "     ${DGN}~80MB | 384 dimensions | English only${CL}"
+  echo -e "     Best for: Fast, low-resource English search. Great default choice."
+  echo -e ""
+  echo -e "  ${BL}2)${CL} paraphrase-multilingual-MiniLM-L12-v2"
+  echo -e "     ${DGN}~470MB | 384 dimensions | 50+ languages${CL}"
+  echo -e "     Best for: Multilingual search without sacrificing much speed."
+  echo -e ""
+  echo -e "  ${BL}3)${CL} all-mpnet-base-v2"
+  echo -e "     ${DGN}~420MB | 768 dimensions | English only${CL}"
+  echo -e "     Best for: Highest quality English embeddings. Slower but more accurate."
+  echo -e ""
+  echo -e "  ${BL}4)${CL} bge-base-en-v1.5 (BAAI)"
+  echo -e "     ${DGN}~440MB | 768 dimensions | English only${CL}"
+  echo -e "     Best for: Retrieval-optimized. Top performer on MTEB benchmarks."
+  echo -e ""
   echo -e "  ${BL}5)${CL} [Enter HuggingFace model name manually]"
+  echo -e ""
   while true; do
     read -e -r -p "  Select [1-5]: " choice
     case "$choice" in
@@ -278,10 +291,22 @@ fi
 
 if has_module "text2vec-model2vec" && [[ -z "${WEAVIATE_MODEL2VEC_HF_MODEL:-}" ]]; then
   echo -e "\n  ${INFO}${YW} Select text2vec-model2vec model:${CL}"
-  echo -e "  ${BL}1)${CL} potion-base-8M (fast, 256d)"
-  echo -e "  ${BL}2)${CL} potion-base-32M (better quality, 256d)"
-  echo -e "  ${BL}3)${CL} potion-multilingual-128M (multilingual)"
+  echo -e "  ${DGN}Model2vec models are extremely fast and lightweight — no GPU needed.${CL}"
+  echo -e "  ${DGN}They distill large models into tiny static embeddings.${CL}\n"
+  echo -e "  ${BL}1)${CL} potion-base-8M"
+  echo -e "     ${DGN}~30MB | 256 dimensions | English${CL}"
+  echo -e "     Best for: Fastest option. Good for low-resource environments or prototyping."
+  echo -e ""
+  echo -e "  ${BL}2)${CL} potion-base-32M"
+  echo -e "     ${DGN}~120MB | 256 dimensions | English${CL}"
+  echo -e "     Best for: Better quality than 8M while still very fast. Good default."
+  echo -e ""
+  echo -e "  ${BL}3)${CL} potion-multilingual-128M"
+  echo -e "     ${DGN}~480MB | 256 dimensions | 100+ languages${CL}"
+  echo -e "     Best for: Multilingual content. Larger but still much faster than transformers."
+  echo -e ""
   echo -e "  ${BL}4)${CL} [Enter HuggingFace model name manually]"
+  echo -e ""
   while true; do
     read -e -r -p "  Select [1-4]: " choice
     case "$choice" in
@@ -297,10 +322,23 @@ fi
 
 if has_module "multi2vec-clip" && [[ -z "${WEAVIATE_CLIP_HF_MODEL:-}" ]]; then
   echo -e "\n  ${INFO}${YW} Select multi2vec-clip model:${CL}"
-  echo -e "  ${BL}1)${CL} clip-ViT-B-32 (fast, 512d)"
-  echo -e "  ${BL}2)${CL} clip-ViT-B-32-multilingual-v1 (multilingual, 512d)"
-  echo -e "  ${BL}3)${CL} clip-ViT-L-14 (higher quality, 768d)"
+  echo -e "  ${DGN}CLIP models embed both text and images into the same vector space,${CL}"
+  echo -e "  ${DGN}enabling cross-modal search (find images by text description and vice versa).${CL}\n"
+  echo -e "  ${BL}1)${CL} clip-ViT-B-32"
+  echo -e "     ${DGN}~600MB | 512 dimensions | English${CL}"
+  echo -e "     Best for: Fast image+text search. Good balance of speed and quality."
+  echo -e ""
+  echo -e "  ${BL}2)${CL} clip-ViT-B-32-multilingual-v1"
+  echo -e "     ${DGN}~1.2GB | 512 dimensions | 50+ languages${CL}"
+  echo -e "     Best for: Multilingual image+text search. Uses separate text encoder."
+  echo -e ""
+  echo -e "  ${BL}3)${CL} clip-ViT-L-14"
+  echo -e "     ${DGN}~1.7GB | 768 dimensions | English${CL}"
+  echo -e "     Best for: Highest quality CLIP embeddings. Significantly more accurate"
+  echo -e "     but requires more RAM (~3GB) and is slower."
+  echo -e ""
   echo -e "  ${BL}4)${CL} [Enter HuggingFace model name manually]"
+  echo -e ""
   while true; do
     read -e -r -p "  Select [1-4]: " choice
     case "$choice" in
@@ -316,10 +354,22 @@ fi
 
 if has_module "reranker-transformers" && [[ -z "${WEAVIATE_RERANKER_HF_MODEL:-}" ]]; then
   echo -e "\n  ${INFO}${YW} Select reranker model:${CL}"
-  echo -e "  ${BL}1)${CL} ms-marco-MiniLM-L-6-v2 (fast, good quality)"
-  echo -e "  ${BL}2)${CL} ms-marco-TinyBERT-L-2-v2 (fastest, smaller)"
-  echo -e "  ${BL}3)${CL} ms-marco-MiniLM-L-12-v2 (best quality, slower)"
+  echo -e "  ${DGN}Rerankers re-score search results for better relevance ranking.${CL}"
+  echo -e "  ${DGN}They run after the initial vector search to refine the top results.${CL}\n"
+  echo -e "  ${BL}1)${CL} ms-marco-MiniLM-L-6-v2"
+  echo -e "     ${DGN}~80MB | Trained on MS MARCO passage ranking${CL}"
+  echo -e "     Best for: Good balance of speed and quality. Recommended default."
+  echo -e ""
+  echo -e "  ${BL}2)${CL} ms-marco-TinyBERT-L-2-v2"
+  echo -e "     ${DGN}~17MB | Smallest and fastest reranker${CL}"
+  echo -e "     Best for: Lowest latency. Use when speed matters more than precision."
+  echo -e ""
+  echo -e "  ${BL}3)${CL} ms-marco-MiniLM-L-12-v2"
+  echo -e "     ${DGN}~130MB | Deeper model, more accurate${CL}"
+  echo -e "     Best for: Best reranking quality. Use when precision is critical."
+  echo -e ""
   echo -e "  ${BL}4)${CL} [Enter HuggingFace model name manually]"
+  echo -e ""
   while true; do
     read -e -r -p "  Select [1-4]: " choice
     case "$choice" in
