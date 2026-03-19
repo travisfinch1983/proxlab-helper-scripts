@@ -85,3 +85,6 @@ echo -e "${TAB}/etc/default/weaviate${TAB3}— Environment config (modules, endp
 echo -e "${TAB}/etc/weaviate/config.yaml${TAB3}— Weaviate server config"
 echo -e "${TAB}/etc/weaviate/models.conf${TAB3}— Selected models reference"
 echo -e "${TAB}/etc/weaviate/create-collection-example.sh — Template for new collections"
+
+# Reset terminal to normal mode (whiptail leaves it in raw mode)
+stty sane 2>/dev/null || true
