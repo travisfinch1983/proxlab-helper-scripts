@@ -45,36 +45,36 @@ if [[ -z "$WEAVIATE_MODULES" ]]; then
 
   SELECTED_MODULES=""
 
-  read -r -p "  Enable text2vec-ollama? [Y/n]: " ans
+  read -e -r -p "  Enable text2vec-ollama? [Y/n]: " ans
   if [[ ! "$ans" =~ ^[Nn]$ ]]; then
     SELECTED_MODULES="text2vec-ollama"
   fi
 
-  read -r -p "  Enable generative-ollama? [Y/n]: " ans
+  read -e -r -p "  Enable generative-ollama? [Y/n]: " ans
   if [[ ! "$ans" =~ ^[Nn]$ ]]; then
     [[ -n "$SELECTED_MODULES" ]] && SELECTED_MODULES="${SELECTED_MODULES},"
     SELECTED_MODULES="${SELECTED_MODULES}generative-ollama"
   fi
 
-  read -r -p "  Enable text2vec-transformers? (requires Docker) [y/N]: " ans
+  read -e -r -p "  Enable text2vec-transformers? (requires Docker) [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     [[ -n "$SELECTED_MODULES" ]] && SELECTED_MODULES="${SELECTED_MODULES},"
     SELECTED_MODULES="${SELECTED_MODULES}text2vec-transformers"
   fi
 
-  read -r -p "  Enable text2vec-model2vec? (requires Docker) [y/N]: " ans
+  read -e -r -p "  Enable text2vec-model2vec? (requires Docker) [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     [[ -n "$SELECTED_MODULES" ]] && SELECTED_MODULES="${SELECTED_MODULES},"
     SELECTED_MODULES="${SELECTED_MODULES}text2vec-model2vec"
   fi
 
-  read -r -p "  Enable multi2vec-clip? (requires Docker) [y/N]: " ans
+  read -e -r -p "  Enable multi2vec-clip? (requires Docker) [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     [[ -n "$SELECTED_MODULES" ]] && SELECTED_MODULES="${SELECTED_MODULES},"
     SELECTED_MODULES="${SELECTED_MODULES}multi2vec-clip"
   fi
 
-  read -r -p "  Enable reranker-transformers? (requires Docker) [y/N]: " ans
+  read -e -r -p "  Enable reranker-transformers? (requires Docker) [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     [[ -n "$SELECTED_MODULES" ]] && SELECTED_MODULES="${SELECTED_MODULES},"
     SELECTED_MODULES="${SELECTED_MODULES}reranker-transformers"
@@ -88,13 +88,13 @@ fi
 has_module() { echo ",$WEAVIATE_MODULES," | grep -q ",$1,"; }
 
 if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$WEAVIATE_OLLAMA_HOST" ]]; then
-  read -r -p "  Ollama host URL [http://localhost:11434]: " ans
+  read -e -r -p "  Ollama host URL [http://localhost:11434]: " ans
   WEAVIATE_OLLAMA_HOST="${ans:-http://localhost:11434}"
 fi
 
 # ─── Interactive auth (if not pre-set) ───
 if [[ "$WEAVIATE_AUTH_ENABLED" != "true" ]]; then
-  read -r -p "  Enable API key authentication? [y/N]: " ans
+  read -e -r -p "  Enable API key authentication? [y/N]: " ans
   if [[ "$ans" =~ ^[Yy]$ ]]; then
     WEAVIATE_AUTH_ENABLED="true"
   fi
@@ -128,9 +128,12 @@ if [[ "$NEED_DOCKER" == "true" ]]; then
   msg_ok "Installed Docker CE"
 fi
 
-# ─── Install Go ───
-msg_info "Installing Go 1.23.6"
-GO_VERSION="1.23.6"
+# ─── Install Go (version matched to Weaviate's requirements) ───
+# We'll determine the exact Go version after cloning the source,
+# but install a reasonable default first. If go.mod requires newer,
+# we'll upgrade before building.
+GO_VERSION="1.24.4"
+msg_info "Installing Go ${GO_VERSION}"
 wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -O /tmp/go.tar.gz
 tar -C /usr/local -xzf /tmp/go.tar.gz
 rm /tmp/go.tar.gz
@@ -156,8 +159,32 @@ cd /opt
 $STD git clone --depth 1 --branch "v${WEAVIATE_VERSION}" https://github.com/weaviate/weaviate.git weaviate-src
 msg_ok "Cloned Weaviate v${WEAVIATE_VERSION}"
 
-msg_info "Building Weaviate from Source (this will take several minutes)"
+# Check if the cloned source needs a newer Go version
 cd /opt/weaviate-src
+if [[ -f go.mod ]]; then
+  REQUIRED_GO=$(grep -oP '^go \K[0-9]+\.[0-9]+' go.mod | head -1)
+  INSTALLED_GO=$(/usr/local/go/bin/go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+  if [[ -n "$REQUIRED_GO" && -n "$INSTALLED_GO" ]]; then
+    REQ_MAJOR=${REQUIRED_GO%%.*}
+    REQ_MINOR=${REQUIRED_GO##*.}
+    INST_MAJOR=${INSTALLED_GO%%.*}
+    INST_MINOR=${INSTALLED_GO##*.}
+    if (( REQ_MAJOR > INST_MAJOR || (REQ_MAJOR == INST_MAJOR && REQ_MINOR > INST_MINOR) )); then
+      # Need a newer Go — fetch the latest patch for the required minor
+      NEEDED_GO=$(curl -fsSL "https://go.dev/dl/?mode=json" | grep -oP '"version":"go\K'${REQUIRED_GO}'\.[0-9]+' | head -1)
+      if [[ -n "$NEEDED_GO" ]]; then
+        msg_info "Upgrading Go to ${NEEDED_GO} (Weaviate requires go${REQUIRED_GO}+)"
+        rm -rf /usr/local/go
+        wget -q "https://go.dev/dl/go${NEEDED_GO}.linux-amd64.tar.gz" -O /tmp/go.tar.gz
+        tar -C /usr/local -xzf /tmp/go.tar.gz
+        rm /tmp/go.tar.gz
+        msg_ok "Upgraded Go to ${NEEDED_GO}"
+      fi
+    fi
+  fi
+fi
+
+msg_info "Building Weaviate from Source (this will take several minutes)"
 CGO_ENABLED=1 go build -o /usr/local/bin/weaviate ./cmd/weaviate-server 2>&1
 echo "${WEAVIATE_VERSION}" >/opt/weaviate_version.txt
 cd /opt
