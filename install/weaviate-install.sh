@@ -88,8 +88,15 @@ fi
 has_module() { echo ",$WEAVIATE_MODULES," | grep -q ",$1,"; }
 
 if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$WEAVIATE_OLLAMA_HOST" ]]; then
-  read -e -r -p "  Ollama host URL [http://localhost:11434]: " ans
-  WEAVIATE_OLLAMA_HOST="${ans:-http://localhost:11434}"
+  while true; do
+    read -e -r -p "  Ollama host URL [http://localhost:11434]: " ans
+    WEAVIATE_OLLAMA_HOST="${ans:-http://localhost:11434}"
+    echo ""
+    echo -e "  ${BL}Ollama URL:${CL} ${WEAVIATE_OLLAMA_HOST}"
+    read -e -r -p "  Is this correct? [Y/n]: " confirm
+    [[ ! "$confirm" =~ ^[Nn]$ ]] && break
+    echo ""
+  done
 fi
 
 # ─── Interactive auth (if not pre-set) ───
