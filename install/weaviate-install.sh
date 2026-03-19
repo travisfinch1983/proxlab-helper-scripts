@@ -29,7 +29,7 @@ WEAVIATE_PORT="${WEAVIATE_PORT:-8080}"
 WEAVIATE_GRPC_PORT="${WEAVIATE_GRPC_PORT:-50051}"
 
 # ─── Interactive module selection (only if WEAVIATE_MODULES not pre-set) ───
-if [[ -z "$WEAVIATE_MODULES" ]]; then
+if [[ -z "${WEAVIATE_MODULES:-}" ]]; then
   echo -e "\n${INFO}${YW} Weaviate Module Selection${CL}\n"
   echo -e "  Available vectorizer/generative modules:\n"
   echo -e "  ${BL}Ollama modules${CL} — connect to an Ollama instance for embeddings/generation"
@@ -139,7 +139,7 @@ select_model_from_endpoint() {
 }
 
 # ─── Interactive Ollama host (if using ollama modules and not pre-set) ───
-if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$WEAVIATE_OLLAMA_HOST" ]]; then
+if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "${WEAVIATE_OLLAMA_HOST:-}" ]]; then
   while true; do
     read -e -r -p "  Ollama host URL [http://localhost:11434]: " ans
     WEAVIATE_OLLAMA_HOST="${ans:-http://localhost:11434}"
@@ -151,14 +151,14 @@ if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$W
   done
 
   # Query Ollama for available models and let user select
-  if has_module "text2vec-ollama" && [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+  if has_module "text2vec-ollama" && [[ -z "${WEAVIATE_OLLAMA_MODEL:-}" ]]; then
     WEAVIATE_OLLAMA_MODEL=$(select_model_from_endpoint "$WEAVIATE_OLLAMA_HOST" "ollama" "embedding model")
-    if [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+    if [[ -z "${WEAVIATE_OLLAMA_MODEL:-}" ]]; then
       # Fallback to manual entry
       while true; do
         read -e -r -p "  Ollama embedding model name: " ans
         WEAVIATE_OLLAMA_MODEL="${ans}"
-        if [[ -z "$WEAVIATE_OLLAMA_MODEL" ]]; then
+        if [[ -z "${WEAVIATE_OLLAMA_MODEL:-}" ]]; then
           echo -e "  ${RD}Model name cannot be empty${CL}"
           continue
         fi
@@ -172,14 +172,14 @@ if (has_module "text2vec-ollama" || has_module "generative-ollama") && [[ -z "$W
 fi
 
 # ─── Interactive OpenAI-compatible endpoint (if using openai modules and not pre-set) ───
-if (has_module "text2vec-openai" || has_module "generative-openai") && [[ -z "$WEAVIATE_OPENAI_BASE_URL" ]]; then
+if (has_module "text2vec-openai" || has_module "generative-openai") && [[ -z "${WEAVIATE_OPENAI_BASE_URL:-}" ]]; then
   echo -e "\n  ${INFO}${YW} OpenAI-compatible API Configuration${CL}"
   echo -e "  Point this at any OpenAI-compatible endpoint (vLLM, KoboldCpp, LiteLLM, etc.)\n"
 
   while true; do
     read -e -r -p "  API base URL (e.g. http://10.0.0.232:8000/v1): " ans
     WEAVIATE_OPENAI_BASE_URL="${ans}"
-    if [[ -z "$WEAVIATE_OPENAI_BASE_URL" ]]; then
+    if [[ -z "${WEAVIATE_OPENAI_BASE_URL:-}" ]]; then
       echo -e "  ${RD}URL cannot be empty${CL}"
       continue
     fi
@@ -191,14 +191,14 @@ if (has_module "text2vec-openai" || has_module "generative-openai") && [[ -z "$W
   done
 
   # Query endpoint for available models and let user select
-  if has_module "text2vec-openai" && [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
+  if has_module "text2vec-openai" && [[ -z "${WEAVIATE_OPENAI_MODEL:-}" ]]; then
     WEAVIATE_OPENAI_MODEL=$(select_model_from_endpoint "$WEAVIATE_OPENAI_BASE_URL" "openai" "embedding model")
-    if [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
+    if [[ -z "${WEAVIATE_OPENAI_MODEL:-}" ]]; then
       # Fallback to manual entry
       while true; do
         read -e -r -p "  Embedding model name (as served by your endpoint): " ans
         WEAVIATE_OPENAI_MODEL="${ans}"
-        if [[ -z "$WEAVIATE_OPENAI_MODEL" ]]; then
+        if [[ -z "${WEAVIATE_OPENAI_MODEL:-}" ]]; then
           echo -e "  ${RD}Model name cannot be empty${CL}"
           continue
         fi
