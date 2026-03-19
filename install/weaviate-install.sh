@@ -734,9 +734,17 @@ OPENAI_EMBEDDING_MODEL=${WEAVIATE_OPENAI_MODEL:-not configured}
 OLLAMA_HOST=${WEAVIATE_OLLAMA_HOST:-not configured}
 OPENAI_BASE_URL=${WEAVIATE_OPENAI_BASE_URL:-not configured}
 TRANSFORMERS_MODEL=${WEAVIATE_TRANSFORMERS_HF_MODEL:-not configured}
+TRANSFORMERS_INFERENCE_URL=http://localhost:${T2V_PORT:-not configured}
 MODEL2VEC_MODEL=${WEAVIATE_MODEL2VEC_HF_MODEL:-not configured}
+MODEL2VEC_INFERENCE_URL=http://localhost:${M2V_PORT:-not configured}
 CLIP_MODEL=${WEAVIATE_CLIP_HF_MODEL:-not configured}
+CLIP_INFERENCE_URL=http://localhost:${CLIP_PORT:-not configured}
 RERANKER_MODEL=${WEAVIATE_RERANKER_HF_MODEL:-not configured}
+RERANKER_INFERENCE_URL=http://localhost:${RR_PORT:-not configured}
+
+# IMPORTANT: multi2vec-clip and reranker-transformers require inferenceUrl
+# to be set PER COLLECTION in the schema, not just via env vars.
+# See /etc/weaviate/create-collection-example.sh for examples.
 MODCONF
 
 msg_ok "Created Weaviate Environment File"
@@ -803,6 +811,28 @@ if curl -sf "http://localhost:${WEAVIATE_PORT}/v1/meta" >/dev/null 2>&1; then
         \"apiEndpoint\": \"${WEAVIATE_OLLAMA_HOST:-http://localhost:11434}\",
         \"vectorizeClassName\": false
       }"
+  elif has_module "text2vec-transformers"; then
+    EXAMPLE_VECTORIZER="text2vec-transformers"
+    EXAMPLE_MODULE_CONFIG="\"text2vec-transformers\": {
+        \"vectorizeClassName\": false
+      }"
+  elif has_module "multi2vec-clip"; then
+    EXAMPLE_VECTORIZER="multi2vec-clip"
+    EXAMPLE_MODULE_CONFIG="\"multi2vec-clip\": {
+        \"vectorizeClassName\": false,
+        \"inferenceUrl\": \"http://localhost:${CLIP_PORT:-9092}\",
+        \"textFields\": [\"content\"]
+      }"
+  fi
+
+  # Add reranker config if enabled (works alongside any vectorizer)
+  if has_module "reranker-transformers" && [[ -n "${RR_PORT:-}" ]]; then
+    if [[ -n "$EXAMPLE_MODULE_CONFIG" ]]; then
+      EXAMPLE_MODULE_CONFIG="${EXAMPLE_MODULE_CONFIG},
+      \"reranker-transformers\": {
+        \"inferenceUrl\": \"http://localhost:${RR_PORT}\"
+      }"
+    fi
   fi
 
   if [[ "$EXAMPLE_VECTORIZER" != "none" ]]; then
