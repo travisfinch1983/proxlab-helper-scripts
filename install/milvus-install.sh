@@ -92,6 +92,8 @@ if [[ -n "${MILVUS_DEB_URL:-}" ]]; then
   msg_ok "Downloaded Milvus v${MILVUS_VERSION}"
 
   msg_info "Installing Milvus Package"
+  # Pre-install known dependencies to avoid dpkg errors
+  $STD apt-get install -y libgfortran5 libgomp1 libquadmath0 2>/dev/null || true
   $STD dpkg -i /tmp/milvus.deb || $STD apt-get install -f -y
   rm /tmp/milvus.deb
   msg_ok "Installed Milvus v${MILVUS_VERSION}"
